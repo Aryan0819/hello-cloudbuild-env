@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gke-gitops-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gke-gitops-app
+  template:
+    metadata:
+      labels:
+        app: gke-gitops-app
+    spec:
+      containers:
+      - name: gke-app
+        image: gke-app-image # This is a placeholder replaced by Cloud Build
+        ports:
+        - containerPort: 8080
