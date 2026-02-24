@@ -1,32 +1,63 @@
-# GitOps-style Continuous Delivery For Kubernetes Engine With Cloud Build
+# ☸️ GitOps-style Continuous Delivery for GKE
+### Modern CI/CD with Cloud Build, Artifact Registry, and Kustomize
 
-This repository contains the code used in the
-[GitOps-style Continuous Delivery with Cloud Build](https://cloud.google.com/kubernetes-engine/docs/tutorials/gitops-cloud-build)
-tutorial.
+![GCP](https://img.shields.io/badge/Google_Cloud-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)
+![GitOps](https://img.shields.io/badge/GitOps-Managed-orange?style=for-the-badge&logo=git)
 
-GitOps is a Continuous Delivery approach [first described by Weaveworks](https://www.weave.works/blog/gitops-operations-by-pull-request) that is
-popular in the Kubernetes community. A key part of GitOps is the idea of
-"environments-as-code": describing your deployments declaratively by files (for
-example, Kubernetes manifests) stored in a Git repository.
+This repository demonstrates a **production-grade GitOps workflow**. By decoupling application source code from deployment manifests, we achieve a highly auditable, secure, and automated path from commit to cluster.
 
-In this tutorial, you create a CI/CD pipeline that automatically builds a
-container image from commited code, stores the image in Google Artifact
-Registry, updates a Kubernetes manifest in a Git repository and triggers a
-deployment to Kubernetes Engine using that manifest.
+---
 
-This tutorial uses two Git repositories: one for the application —the _app_
-repository— and one for storing the deployment manifests —the _env_ repository.
-When a change is pushed to the application repository, tests are run, a
-container image is built and pushed to Artifact Registry. Once the image is
-pushed, the deployment manifests are updated to use that new image and they are
-pushed to the _candidate_ branch of the _env_ repository. This triggers the actual
-deployment in Kubernetes. Once the deployment is finished, the new manifests
-are copied over to the _production_ branch of the _env_ repository.
+## 🏗️ Architecture Overview
 
-In the end, you have a system where:
-* The _candidate_ branch is a history of the deployment attempts.
-* The _production_ branch is a history of the successful deployments.
-* You have a view of successful and failed deployments in Cloud Build.
-* You can rollback to any previous deployment by re-executing the corresponding
-  job in Cloud Build. A rollback also updates the _production_ branch to
-  truthfully reflect the history of deployments.
+We utilize a **Two-Repository Strategy** to maintain a clean separation of concerns:
+
+* **📦 App Repository:** Contains application source code, Dockerfile, and CI logic (`cloudbuild.yaml`).
+* **🛠️ Env Repository:** Acts as the "Source of Truth" for infrastructure. It contains Kubernetes manifests managed via **Kustomize** overlays.
+
+### The Modern Pipeline Flow
+1.  **Commit:** A developer pushes code to the App Repo.
+2.  **Build (CI):** Cloud Build triggers, builds a container image, and pushes it to **Artifact Registry**.
+3.  **Hydrate:** Cloud Build clones the **Env Repo** and uses `kustomize edit set image` to update the deployment manifest with the new image tag.
+4.  **Sync (CD):** A separate trigger on the Env Repo applies the updated manifests to **Google Kubernetes Engine (GKE)**.
+
+---
+
+## 🚀 Key Modern Features
+
+* **Declarative State:** No manual `kubectl` commands. Git is the only way to change the cluster state.
+* **Kustomize Integration:** Uses native Kubernetes configuration management instead of brittle text-replacement (sed) scripts.
+* **Workload Identity:** Secure, keyless authentication between Cloud Build and GKE.
+* **Environment Promotion:** * **Candidate Branch:** History of all deployment attempts.
+    * **Production Branch:** History of verified, successful deployments.
+* **Instant Rollbacks:** Simply re-run a previous Cloud Build job to revert the Git state and the cluster simultaneously.
+
+---
+
+## 🛠️ Implementation Snippet
+
+A modern `cloudbuild.yaml` for the **App Repo** looks like this:
+
+```yaml
+steps:
+  # 1. Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/app:$SHORT_SHA', '.']
+
+  # 2. Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/app:$SHORT_SHA']
+
+  # 3. Update Env Repo using Kustomize
+  - name: 'google/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        git clone [https://github.com/your-org/env-repo.git](https://github.com/your-org/env-repo.git)
+        cd env-repo/overlays/production
+        kustomize edit set image gke-app=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO_NAME/app:$SHORT_SHA
+        git add . && git commit -m "Update image to $SHORT_SHA"
+        git push origin candidate
+```
