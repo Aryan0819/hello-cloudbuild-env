@@ -1,0 +1,3 @@
+resources:
+  - deployment.yaml
+  - service.yaml # Assuming you have a service.yaml here too
