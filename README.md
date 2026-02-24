@@ -61,7 +61,7 @@ steps:
         git add . && git commit -m "Update image to $SHORT_SHA"
         git push origin candidate
 ```
-##🛠️ How it works in your CI/CD
+## 🛠️ How it works in your CI/CD
 ```bash
 cd overlays/production
 kustomize edit set image gke-app-image=us-central1-docker.pkg.dev/$PROJECT_ID/repo/app:$SHORT_SHA
